@@ -3,6 +3,10 @@ use std::io::Error;
 mod terminal;
 use terminal::{Terminal, Size, Position};
 
+const NAME: &str = env!("CARGO_PKG_NAME");
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+
 pub struct Editor {
     should_quit: bool,
 }
@@ -48,13 +52,31 @@ impl Editor {
             Terminal::clear_screen()?;
             Terminal::print("Goodbye.\r\n")?;
         } else {
+            //initialize screen
             Self::draw_rows()?;
-            Terminal::move_cursor_to(Position{x:0, y:0})?;
+            Self::draw_welcome_message()?;
+            Terminal::move_cursor_to(Position { x: 0, y: 0})?;
         }
         Terminal::show_cursor()?;
         Terminal::execute()?;
         Ok(())
     }
+    fn draw_welcome_message() -> Result<(), Error>{
+        let mut welcome_message = format!("{NAME} editor -- version {VERSION}");
+        let width = Terminal::size()?.width as usize;
+        let len = welcome_message.len();
+        let padding = (width - len) / 2;
+        //TODO: WRAP LINES IF EXCEED WIDTH
+        if welcome_message.len() > width as usize {
+            welcome_message.truncate(width);
+        }
+        welcome_message = format!("~{}{}", " ".repeat(padding-1), welcome_message);
+        Terminal::move_cursor_to(Position { x: 0, y: 0 })?;
+        Terminal::print(welcome_message.as_str())?;
+        Ok(())
+    }
+
+
     fn draw_rows() -> Result<(), Error> {
         let Size{height, ..} = Terminal::size()?;
         for current_row in 0..height {
@@ -64,6 +86,25 @@ impl Editor {
                 Terminal::print("\r\n")?;
             }
         }
+        Ok(())
+    }
+    
+    fn draw_message(message: &str) -> Result<(), Error> {
+        let Size{width, height} = Terminal::size()?;
+        let mut message = message.to_string();
+        if message.len() > width as usize {
+            message.truncate(width as usize);
+        }
+
+        let x_middle_point = width as usize / 2 - message.len() / 2;
+        let y_middle_point = height as usize / 2;
+        message = format!("~{}{}", " ".repeat(x_middle_point), message);
+
+        Terminal::move_cursor_to(Position { x: 0, y: y_middle_point as u16 })?;
+        Terminal::print("~")?;
+
+        Terminal::move_cursor_to(Position { x: 0, y: y_middle_point as u16 })?;
+        Terminal::print(message.as_str())?;
         Ok(())
     }
 }

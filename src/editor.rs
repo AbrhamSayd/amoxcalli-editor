@@ -1,10 +1,6 @@
 use core::cmp::min;
-use crossterm::event::{
-    read,
-    Event::{self, Key},
-    KeyCode, KeyEvent, KeyEventKind, KeyModifiers,
-};
-use std::{env, io::Error};
+use crossterm::event::{read, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use std::{ env, io::Error};
 mod terminal;
 mod view;
 use terminal::{Position, Size, Terminal};
@@ -45,10 +41,11 @@ impl Editor {
                 break;
             }
             let event = read()?;
-            self.evaluate_event(&event)?;
+            self.evaluate_event(event)?;
         }
         Ok(())
     }
+    
     fn move_point(&mut self, key_code: KeyCode) -> Result<(), Error> {
         let Location { mut x, mut y } = self.location;
         let Size { height, width } = Terminal::size()?;
@@ -82,34 +79,51 @@ impl Editor {
         self.location = Location { x, y };
         Ok(())
     }
-    fn evaluate_event(&mut self, event: &Event) -> Result<(), Error> {
-        if let Key(KeyEvent {
-            code,
-            modifiers,
-            kind: KeyEventKind::Press,
-            ..
-        }) = event
-        {
-            match code {
-                KeyCode::Char('q') if *modifiers == KeyModifiers::CONTROL => {
-                    self.should_quit = true;
+     // needless_pass_by_value: Event is not huge, so there is not a
+    // performance overhead in passing by value, and pattern matching in this
+    // function would be needlessly complicated if we pass by reference here.
+    
+    #[allow(clippy::needless_pass_by_value)]
+    fn evaluate_event(&mut self, event: Event) -> Result<(), Error> {
+        match event {
+            Event::Key(KeyEvent {
+                code,
+                kind: KeyEventKind::Press, //Windows. Compatibility
+                modifiers,
+                ..
+            }) => match (code, modifiers) {
+                (KeyCode::Char('q'), KeyModifiers::CONTROL) => {
+                    self.should_quit = true
                 }
+            (
                 KeyCode::Up
                 | KeyCode::Down
                 | KeyCode::Left
                 | KeyCode::Right
-                | KeyCode::PageDown
                 | KeyCode::PageUp
+                | KeyCode::PageDown
                 | KeyCode::End
-                | KeyCode::Home => {
-                    self.move_point(*code)?;
-                }
-                _ => (),
+                | KeyCode::Home,
+                _,
+            ) => {
+                self.move_point(code)?;
             }
+            _ => {}
+        },
+        Event::Resize(width_u16,height_u16 ) => {
+            let height = height_u16 as usize;
+            let width = width_u16 as usize;
+            self.view.resize(Size { 
+                height,
+                width,
+            });
         }
-        Ok(())
+        _ => {}
     }
-    fn refresh_screen(&self) -> Result<(), Error> {
+    Ok(())
+    }
+
+    fn refresh_screen(&mut self) -> Result<(), Error> {
         Terminal::hide_caret()?;
         Terminal::move_caret_to(Position::default())?;
         if self.should_quit {

@@ -1,7 +1,7 @@
 use crossterm::cursor::{Hide, MoveTo, Show};
-use crossterm::{queue, Command};
 use crossterm::style::Print;
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, size, Clear, ClearType};
+use crossterm::{queue, Command};
 use std::io::{stdout, Error, Write};
 
 #[derive(Copy, Clone)]
@@ -36,7 +36,9 @@ impl Terminal {
         Self::queue_command(Clear(ClearType::CurrentLine))?;
         Ok(())
     }
+    
     pub fn move_caret_to(position: Position) -> Result<(), Error> {
+
         #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
         Self::queue_command(MoveTo(position.col as u16, position.row as u16))?;
         Ok(())
@@ -53,12 +55,11 @@ impl Terminal {
         Self::queue_command(Print(string))?;
         Ok(())
     }
+
     pub fn size() -> Result<Size, Error> {
         let (width_u16, height_u16) = size()?;
-        // clippy::as_conversions: See doc above
         #[allow(clippy::as_conversions)]
         let height = height_u16 as usize;
-        // clippy::as_conversions: See doc above
         #[allow(clippy::as_conversions)]
         let width = width_u16 as usize;
         Ok(Size { height, width })
@@ -67,7 +68,8 @@ impl Terminal {
         stdout().flush()?;
         Ok(())
     }
-    pub fn queue_command<T:Command>(command: T) -> Result<(), Error>{
+
+    fn queue_command<T: Command>(command: T) -> Result<(), Error> {
         queue!(stdout(), command)?;
         Ok(())
     }

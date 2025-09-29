@@ -16,6 +16,14 @@ pub struct Position {
 }
 pub struct Terminal;
 
+impl Position {
+    pub const fn saturating_sub(self, other: Position) -> Position {
+        Self {
+            row: self.row.saturating_sub(other.col),
+            col: self.col.saturating_sub(other.row),
+        }
+    }
+}
 impl Terminal {
     pub fn terminate() -> Result<(), Error> {
         Self::leave_alternate_screen()?;

@@ -25,7 +25,6 @@ pub struct View {
 }
 
 impl View {
-
     fn resize(&mut self, to: Size) {
         self.size = to;
         self.scroll_text_location_into_view();
@@ -37,6 +36,10 @@ impl View {
             EditorCommand::Resize(size) => self.resize(size),
             EditorCommand::Move(direction) => self.move_text_location(&direction),
             EditorCommand::Quit => {}
+            EditorCommand::Insert(character) => self.insert_char(character),
+            EditorCommand::Delete => self.delete(),
+            EditorCommand::Backspace => self.backspace(),
+            EditorCommand::Enter => self.insert_char('\n'),
         }
     }
 
@@ -47,8 +50,40 @@ impl View {
         }
     }
 
+    fn backspace(&mut self) {
+        if self.text_location.line_index != 0 || self.text_location.grapheme_index != 0 {
+            self.move_left();
+            self.delete();
+        }
+    }
 
-     pub fn render(&mut self) {
+    fn delete(&mut self) {
+        self.buffer.delete(self.text_location);
+        self.needs_redraw = true;
+    }
+
+    fn insert_char(&mut self, character: char) {
+        let old_len = self
+            .buffer
+            .lines
+            .get(self.text_location.line_index)
+            .map_or(0, Line::grapheme_count);
+
+        self.buffer.insert_char(character, self.text_location);
+        let new_len = self
+            .buffer
+            .lines
+            .get(self.text_location.line_index)
+            .map_or(0, Line::grapheme_count);
+
+        let grapheme_delta = new_len.saturating_sub(old_len);
+        if grapheme_delta > 0 {
+            self.move_text_location(&Direction::Right);
+        }
+        self.needs_redraw = true;
+    }
+
+    pub fn render(&mut self) {
         if !self.needs_redraw {
             return;
         }
@@ -78,7 +113,7 @@ impl View {
         self.needs_redraw = false;
     }
 
-      fn render_line(at: usize, line_text: &str){
+    fn render_line(at: usize, line_text: &str) {
         let result = Terminal::print_row(at, line_text);
         debug_assert!(result.is_ok(), "Failed to render line ");
     }
@@ -102,58 +137,58 @@ impl View {
         full_message
     }
 
-
-    fn scroll_vertically(&mut self, to: usize){
-        let Size {height, ..} = self.size;
+    fn scroll_vertically(&mut self, to: usize) {
+        let Size { height, .. } = self.size;
         let offset_changed = if to < self.scroll_offset.row {
             self.scroll_offset.row = to;
             true
         } else if to >= self.scroll_offset.row.saturating_add(height) {
             self.scroll_offset.row = to.saturating_sub(height).saturating_add(1);
             true
-    } else{
-        false
-    };
-    self.needs_redraw = self.needs_redraw || offset_changed;
+        } else {
+            false
+        };
+        if offset_changed {
+            self.needs_redraw = true;
+        }
     }
 
-    fn scroll_horizontally(&mut self, to: usize){
-        let Size {width, ..} = self.size;
+    fn scroll_horizontally(&mut self, to: usize) {
+        let Size { width, .. } = self.size;
         let offset_changed = if to < self.scroll_offset.col {
             self.scroll_offset.col = to;
             true
         } else if to >= self.scroll_offset.col.saturating_add(width) {
             self.scroll_offset.col = to.saturating_sub(width).saturating_add(1);
             true
-    } else{
-        false
-    };
-    self.needs_redraw = self.needs_redraw || offset_changed;
+        } else {
+            false
+        };
+        if offset_changed {
+            self.needs_redraw = true;
+        }
     }
-   
-  
-   pub fn caret_position(&self) -> Position {
-        self.text_location_to_position().saturating_sub(self.scroll_offset)
+
+    pub fn caret_position(&self) -> Position {
+        self.text_location_to_position()
+            .saturating_sub(self.scroll_offset)
     }
     fn text_location_to_position(&self) -> Position {
         let row = self.text_location.line_index;
         let col = self.buffer.lines.get(row).map_or(0, |line| {
             line.width_until(self.text_location.grapheme_index)
         });
-        Position {  col, row }
+        Position { col, row }
     }
 
-     
-    fn scroll_text_location_into_view(&mut self){
-        let Position { row, col} = self.text_location_to_position();
+    fn scroll_text_location_into_view(&mut self) {
+        let Position { row, col } = self.text_location_to_position();
         self.scroll_vertically(row);
         self.scroll_horizontally(col);
     }
 
-    
-
-    fn move_text_location(&mut self, direction: &Direction){
-        let Size { height, ..} = self.size;
+    fn move_text_location(&mut self, direction: &Direction) {
+        let Size { height, .. } = self.size;
 
         match direction {
             Direction::Up => self.move_up(1),
@@ -193,11 +228,11 @@ impl View {
         }
     }
 
-     #[allow(clippy::arithmetic_side_effects)]
+    #[allow(clippy::arithmetic_side_effects)]
     fn move_left(&mut self) {
         if self.text_location.grapheme_index > 0 {
             self.text_location.grapheme_index -= 1;
-        } else {
+        } else if self.text_location.line_index > 0 {
             self.move_up(1);
             self.move_to_end_of_line();
         }
@@ -208,7 +243,7 @@ impl View {
     }
 
     fn move_to_end_of_line(&mut self) {
-         self.text_location.grapheme_index = self
+        self.text_location.grapheme_index = self
             .buffer
             .lines
             .get(self.text_location.line_index)
@@ -224,11 +259,10 @@ impl View {
                 min(line.grapheme_count(), self.text_location.grapheme_index)
             });
     }
-   
+
     fn snap_to_valid_line(&mut self) {
         self.text_location.line_index = min(self.text_location.line_index, self.buffer.height());
     }
-
 }
 
 impl Default for View {

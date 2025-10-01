@@ -60,57 +60,56 @@ impl Editor {
     // performance overhead in passing by value, and pattern matching in this
     // function would be needlessly complicated if we pass by reference here.
 
-    #[allow(clippy::needless_pass_by_value)]
-    fn evaluate_event(&mut self, event: Event) {
-        let should_process = match &event {
-            Event::Key(KeyEvent { kind, .. }) => {
-                // Process both Press and Release events, but handle them differently
-                matches!(kind, KeyEventKind::Press | KeyEventKind::Release)
-            }
-            Event::Resize(_, _) => true,
-            _ => false,
-        };
+#[allow(clippy::needless_pass_by_value)]
+fn evaluate_event(&mut self, event: Event) {
+    let should_process = match &event {
+        Event::Key(KeyEvent { kind, .. }) => {
+            // Process both Press and Release events, but handle them differently
+            matches!(kind, KeyEventKind::Press | KeyEventKind::Release)
+        }
+        Event::Resize(_, _) => true,
+        Event::FocusGained | Event::FocusLost => true, // Add this to handle focus events
+        _ => false,
+    };
 
-        if should_process {
-            match &event {
-                Event::Key(KeyEvent {
-                    kind: KeyEventKind::Release,
-                    ..
-                }) => {
-                    // Handle key release events - currently just acknowledge them
-                    #[cfg(debug_assertions)]
-                    {
-                        {}
-                    }
-                    // For now, we don't perform any action on release
-                    // but this prevents panicking in systems that register release events like Windows
-                }
-                _ => {
-                    // Handle press events and resize events
-                    match EditorCommand::try_from(event) {
-                        Ok(command) => {
-                            if matches!(command, EditorCommand::Quit) {
-                                self.should_quit = true;
-                            } else {
-                                self.view.handle_command(command);
-                            }
-                        }
-                        Err(err) => {
-                            #[cfg(debug_assertions)]
-                            {
-                                eprintln!("Could not convert event to command: {err:?}");
-                            }
-                        }
-                    }
-                }
+    if should_process {
+        match &event {
+            Event::Key(KeyEvent {
+                kind: KeyEventKind::Release,
+                ..
+            }) => {
+                // Handle key release events - currently just acknowledge them
+                // For now, we don't perform any action on release
+                // but this prevents panicking in systems that register release events like Windows
             }
-        } else {
-            #[cfg(debug_assertions)]
-            {
-                eprintln!("Unhandled event type: {event:?}");
+            Event::FocusGained | Event::FocusLost => {
+                // Handle focus events silently - no action needed for now
+            }
+            _ => {
+                // Handle press events and resize events
+                match EditorCommand::try_from(event) {
+                    Ok(command) => {
+                        if matches!(command, EditorCommand::Quit) {
+                            self.should_quit = true;
+                        } else {
+                            self.view.handle_command(command);
+                        }
+                    }
+                    Err(_err) => {
+                        // Silently ignore unrecognized commands to prevent terminal bell
+                        // The bell often occurs when characters can't be processed
+                        #[cfg(debug_assertions)]
+                        {
+                            eprintln!("Could not convert event to command: {_err:?}");
+                        }
+                    }
+                }
             }
         }
     }
+    // Remove the else block or make it silent to prevent unnecessary processing
+}
+    
     fn refresh_screen(&mut self) {
         let _ = Terminal::hide_caret();
         self.view.render();

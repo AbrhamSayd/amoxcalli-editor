@@ -24,6 +24,7 @@ impl Position {
         }
     }
 }
+
 impl Terminal {
     pub fn terminate() -> Result<(), Error> {
         Self::leave_alternate_screen()?;
@@ -32,6 +33,7 @@ impl Terminal {
         disable_raw_mode()?;
         Ok(())
     }
+
     pub fn initialize() -> Result<(), Error> {
         enable_raw_mode()?;
         Self::enter_alternate_screen()?;
@@ -39,10 +41,12 @@ impl Terminal {
         Self::execute()?;
         Ok(())
     }
+
     pub fn clear_screen() -> Result<(), Error> {
         Self::queue_command(Clear(ClearType::All))?;
         Ok(())
     }
+
     pub fn clear_line() -> Result<(), Error> {
         Self::queue_command(Clear(ClearType::CurrentLine))?;
         Ok(())
@@ -54,10 +58,12 @@ impl Terminal {
         Self::queue_command(MoveTo(position.col as u16, position.row as u16))?;
         Ok(())
     }
+
     pub fn hide_caret() -> Result<(), Error> {
         Self::queue_command(Hide)?;
         Ok(())
     }
+
     pub fn show_caret() -> Result<(), Error> {
         Self::queue_command(Show)?;
         Ok(())
@@ -86,6 +92,7 @@ impl Terminal {
         let width = width_u16 as usize;
         Ok(Size { height, width })
     }
+    
     pub fn execute() -> Result<(), Error> {
         stdout().flush()?;
         Ok(())

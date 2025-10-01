@@ -1,7 +1,6 @@
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use std::convert::TryFrom;
 
-
 use super::terminal::Size;
 
 pub enum Direction {
@@ -19,36 +18,42 @@ pub enum EditorCommand {
     Resize(Size),
     Move(Direction),
     Quit,
-
+    Insert(char),
+    Backspace,
+    Delete,
+    Enter,
 }
-
+#[allow(clippy::as_conversions)]
 impl TryFrom<Event> for EditorCommand {
     type Error = String;
 
     fn try_from(event: Event) -> Result<Self, Self::Error> {
         match event {
-            Event::Key(KeyEvent { code, modifiers, ..}) =>
-            match (code, modifiers) {
-                (KeyCode::Char('q'), KeyModifiers::CONTROL) => Ok(EditorCommand::Quit),
-                (KeyCode::Up, KeyModifiers::NONE) => Ok(EditorCommand::Move(Direction::Up)),
-                (KeyCode::Down, KeyModifiers::NONE) => Ok(EditorCommand::Move(Direction::Down)),
-                (KeyCode::Left, KeyModifiers::NONE) => Ok(EditorCommand::Move(Direction::Left)),
-                (KeyCode::Right, KeyModifiers::NONE) => Ok(EditorCommand::Move(Direction::Right)),
-                (KeyCode::PageUp, KeyModifiers::NONE) => Ok(EditorCommand::Move(Direction::PageUp)),
-                (KeyCode::PageDown, KeyModifiers::NONE) => Ok(EditorCommand::Move(Direction::PageDown)),
-                (KeyCode::Home, KeyModifiers::NONE) => Ok(EditorCommand::Move(Direction::Home)),
-                (KeyCode::End, KeyModifiers::NONE) => Ok(EditorCommand::Move(Direction::End)),
+            Event::Key(KeyEvent {
+                code, modifiers, ..
+            }) => match (code, modifiers) {
+                (KeyCode::Char('q'), KeyModifiers::CONTROL) => Ok(Self::Quit),
+                (KeyCode::Char(character), KeyModifiers::NONE | KeyModifiers::SHIFT) => {
+                    Ok(Self::Insert(character))
+                }
+                (KeyCode::Up, _) => Ok(Self::Move(Direction::Up)),
+                (KeyCode::Down, _) => Ok(Self::Move(Direction::Down)),
+                (KeyCode::Left, _) => Ok(Self::Move(Direction::Left)),
+                (KeyCode::Right, _) => Ok(Self::Move(Direction::Right)),
+                (KeyCode::PageUp, _) => Ok(Self::Move(Direction::PageUp)),
+                (KeyCode::PageDown, _) => Ok(Self::Move(Direction::PageDown)),
+                (KeyCode::Home, _) => Ok(Self::Move(Direction::Home)),
+                (KeyCode::End, _) => Ok(Self::Move(Direction::End)),
+                (KeyCode::Backspace, _) => Ok(Self::Backspace),
+                (KeyCode::Delete, _) => Ok(Self::Delete),
+                (KeyCode::Enter, _) => Ok(Self::Enter),
                 _ => Err(format!("Unrecognized key event: {event:?}")),
             },
-            Event::Resize(width_u16, height_u16) => {
-                #[allow(clippy::as_conversions)]
-                let width = width_u16 as usize;
-                #[allow(clippy::as_conversions)]
-                let height = height_u16 as usize;
-                Ok(EditorCommand::Resize(Size { height, width }))
-            }
+            Event::Resize(width_u16, height_u16) => Ok(Self::Resize(Size {
+                height: height_u16 as usize,
+                width: width_u16 as usize,
+            })),
             _ => Err(format!("Unrecognized event: {event:?}")),
         }
     }
-
 }

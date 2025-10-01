@@ -22,6 +22,7 @@ pub enum EditorCommand {
     Backspace,
     Delete,
     Enter,
+    Tab,
 }
 #[allow(clippy::as_conversions)]
 impl TryFrom<Event> for EditorCommand {
@@ -47,6 +48,7 @@ impl TryFrom<Event> for EditorCommand {
                 (KeyCode::Backspace, _) => Ok(Self::Backspace),
                 (KeyCode::Delete, _) => Ok(Self::Delete),
                 (KeyCode::Enter, _) => Ok(Self::Enter),
+                (KeyCode::Tab, _) => Ok(Self::Tab),
                 _ => Err(format!("Unrecognized key event: {event:?}")),
             },
             Event::Resize(width_u16, height_u16) => Ok(Self::Resize(Size {

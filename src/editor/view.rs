@@ -17,6 +17,7 @@ pub struct Location {
     pub line_index: usize,
 }
 pub struct View {
+    file_name: String,
     buffer: Buffer,
     needs_redraw: bool,
     size: Size,
@@ -41,10 +42,21 @@ impl View {
             EditorCommand::Backspace => self.delete_backwards(),
             EditorCommand::Enter => self.insert_newline(),
             EditorCommand::Tab => self.insert_char('\t'),
+            EditorCommand::Save => {
+                if !self.file_name.is_empty() {
+                    if let Err(e) = self.buffer.save(&self.file_name) {
+                        eprintln!("Error saving file {}: {}", self.file_name, e);
+                    }
+                }
+            }
         }
     }
 
     pub fn load(&mut self, file_name: &str) {
+        // we escape here since we want to keep the original file name in case does not exist
+        // and the user wants to create it later
+        self.file_name = file_name.to_string();
+
         if let Ok(buffer) = Buffer::load(file_name) {
             self.buffer = buffer;
             self.needs_redraw = true;
@@ -277,6 +289,7 @@ impl Default for View {
         Self {
             buffer: Buffer::default(),
             needs_redraw: true,
+            file_name: String::new(),
             size: Terminal::size().unwrap_or_default(),
             scroll_offset: Position::default(),
             text_location: Location::default(),

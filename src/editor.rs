@@ -100,7 +100,7 @@ fn evaluate_event(&mut self, event: Event) {
                         // The bell often occurs when characters can't be processed
                         #[cfg(debug_assertions)]
                         {
-                            eprintln!("Could not convert event to command: {_err:?}");
+                           
                         }
                     }
                 }

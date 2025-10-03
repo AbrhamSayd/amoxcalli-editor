@@ -61,5 +61,14 @@ impl Buffer {
         }
     }
 
+    pub fn save(&self, file_name: &str) -> Result<(), Error> {
+        use std::io::Write;
+        let mut file = std::fs::File::create(file_name)?;
+        for line in &self.lines {
+            writeln!(file, "{}", line.to_string())?;
+        }
+        Ok(())
+    }
+
     
 }

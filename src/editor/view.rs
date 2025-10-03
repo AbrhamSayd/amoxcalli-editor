@@ -1,5 +1,7 @@
 use std::cmp::min;
 
+use crate::editor::DocumentStatus;
+
 use self::line::Line;
 
 use super::{
@@ -16,8 +18,8 @@ pub struct Location {
     pub grapheme_index: usize,
     pub line_index: usize,
 }
+#[derive(Default)]
 pub struct View {
-    file_name: String,
     buffer: Buffer,
     needs_redraw: bool,
     size: Size,
@@ -26,6 +28,20 @@ pub struct View {
 }
 
 impl View {
+    pub fn new(margin_bottom: usize) -> Self {
+        let terminal_size = Terminal::size().unwrap_or_default();
+        Self {
+            buffer: Buffer::default(),
+            needs_redraw: true,
+            size: Size {
+                width: terminal_size.width,
+                height: terminal_size.height.saturating_sub(margin_bottom),
+            },
+            text_location: Location::default(),
+            scroll_offset: Position::default(),
+        }
+    }
+
     fn resize(&mut self, to: Size) {
         self.size = to;
         self.scroll_text_location_into_view();
@@ -35,32 +51,33 @@ impl View {
     pub fn handle_command(&mut self, command: EditorCommand) {
         match command {
             EditorCommand::Resize(size) => self.resize(size),
-            EditorCommand::Move(direction) => self.move_text_location(&direction),
+            EditorCommand::Move(direction) => self.move_text_location(direction),
             EditorCommand::Quit => {}
             EditorCommand::Insert(character) => self.insert_char(character),
             EditorCommand::Delete => self.delete(),
             EditorCommand::Backspace => self.delete_backwards(),
             EditorCommand::Enter => self.insert_newline(),
             EditorCommand::Tab => self.insert_char('\t'),
-            EditorCommand::Save => {
-                if !self.file_name.is_empty() {
-                    if let Err(e) = self.buffer.save(&self.file_name) {
-                        eprintln!("Error saving file {}: {}", self.file_name, e);
-                    }
-                }
-            }
+            EditorCommand::Save => self.save(),
         }
     }
 
     pub fn load(&mut self, file_name: &str) {
         // we escape here since we want to keep the original file name in case does not exist
         // and the user wants to create it later
-        self.file_name = file_name.to_string();
 
-        if let Ok(buffer) = Buffer::load(file_name) {
-            self.buffer = buffer;
-            self.needs_redraw = true;
-        }
+       match Buffer::load(file_name) {
+              Ok(buffer) => {
+                self.buffer = buffer;
+              }
+              Err(_) => {
+                self.buffer.file_name = file_name.to_string().into();
+              }
+           
+       }
+
+        self.needs_redraw = true;
+
     }
 
     fn delete_backwards(&mut self) {
@@ -91,14 +108,14 @@ impl View {
 
         let grapheme_delta = new_len.saturating_sub(old_len);
         if grapheme_delta > 0 {
-            self.move_text_location(&Direction::Right);
+            self.move_text_location(Direction::Right);
         }
         self.needs_redraw = true;
     }
 
     fn insert_newline(&mut self) {
         self.buffer.insert_newline(self.text_location);
-        self.move_text_location(&Direction::Right);
+        self.move_text_location(Direction::Right);
         self.needs_redraw = true;
     }
 
@@ -206,7 +223,7 @@ impl View {
         self.scroll_horizontally(col);
     }
 
-    fn move_text_location(&mut self, direction: &Direction) {
+    fn move_text_location(&mut self, direction: Direction) {
         let Size { height, .. } = self.size;
 
         match direction {
@@ -282,17 +299,18 @@ impl View {
     fn snap_to_valid_line(&mut self) {
         self.text_location.line_index = min(self.text_location.line_index, self.buffer.height());
     }
-}
 
-impl Default for View {
-    fn default() -> Self {
-        Self {
-            buffer: Buffer::default(),
-            needs_redraw: true,
-            file_name: String::new(),
-            size: Terminal::size().unwrap_or_default(),
-            scroll_offset: Position::default(),
-            text_location: Location::default(),
-        }
+    fn save(&mut self) {
+        let _ = self.buffer.save();
+    }
+    pub fn get_status(&self) -> DocumentStatus {
+    DocumentStatus {
+        total_lines: self.buffer.height(),
+        current_line_index: self.text_location.line_index,
+        is_modified: self.buffer.dirty,
+        file_name: self.buffer.file_name.clone(),
     }
 }
+}
+
+

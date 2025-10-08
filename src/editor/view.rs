@@ -1,17 +1,18 @@
 use std::{cmp::min, io::Error};
 
-use crate::editor::{DocumentStatus, NAME, VERSION};
-
 use self::line::Line;
 
 use super::{
-    commands::{Direction, EditorCommand},
+    command::{Edit, Move},
     terminal::{Position, Size, Terminal},
     uicomponent::UIComponent,
+    DocumentStatus, NAME, VERSION,
 };
+
 mod buffer;
 use buffer::Buffer;
 mod line;
+
 #[derive(Copy, Clone, Default)]
 pub struct Location {
     pub grapheme_index: usize,
@@ -20,52 +21,60 @@ pub struct Location {
 #[derive(Default)]
 pub struct View {
     buffer: Buffer,
-    needs_redraw: bool,
+    requires_redraw: bool,
     size: Size,
     text_location: Location,
     scroll_offset: Position,
 }
 
 impl View {
-    pub fn handle_command(&mut self, command: EditorCommand) {
+    pub fn handle_edit_command(&mut self, command: Edit) {
         match command {
-            EditorCommand::Resize(_) | EditorCommand::Quit => {}
-            EditorCommand::Move(direction) => self.move_text_location(direction),
-            EditorCommand::Insert(character) => self.insert_char(character),
-            EditorCommand::Delete => self.delete(),
-            EditorCommand::Backspace => self.delete_backwards(),
-            EditorCommand::Enter => self.insert_newline(),
-            EditorCommand::Tab => self.insert_char('\t'),
-            EditorCommand::Save => self.save(),
+            Edit::Insert(character) => self.insert_char(character),
+            Edit::Delete => self.delete(),
+            Edit::DeleteBackward => self.delete_backwards(),
+            Edit::InsertNewLine => self.insert_newline(),
         }
     }
 
-    pub fn load(&mut self, file_name: &str) {
+    pub fn handle_move_command(&mut self, command: Move){
+        let Size { height, .. } = self.size;
+        match command {
+            Move::Up => self.move_up(1),
+            Move::Down => self.move_down(1),
+            Move::Left => self.move_left(),
+            Move::Right => self.move_right(),
+            Move::PageUp => self.move_up(height.saturating_sub(1)),
+            Move::PageDown => self.move_down(height.saturating_sub(1)),
+            Move::StartOfLine => self.move_to_start_of_line(),
+            Move::EndOfLine => self.move_to_end_of_line(),
+        }
+        self.scroll_text_location_into_view();
+    }
+
+    pub fn load(&mut self, file_name: &str) -> Result<(), Error> {
         // we escape here since we want to keep the original file name in case does not exist
         // and the user wants to create it later
+        let buffer = Buffer::load(file_name)?;
+        self.buffer = buffer;
+        self.set_requires_redraw(true);
+        Ok(())
+    }
 
-        match Buffer::load(file_name) {
-            Ok(buffer) => {
-                self.buffer = buffer;
-            }
-            Err(_) => {
-                self.buffer.file_name = file_name.to_string().into();
-            }
-        }
-
-        self.mark_redraw(true);
+    pub fn save(&mut self) -> Result<(), Error> {
+        self.buffer.save()
     }
 
     fn delete_backwards(&mut self) {
         if self.text_location.line_index != 0 || self.text_location.grapheme_index != 0 {
-            self.move_left();
+            self.handle_move_command(Move::Left);
             self.delete();
         }
     }
 
     fn delete(&mut self) {
         self.buffer.delete(self.text_location);
-        self.mark_redraw(true);
+        self.set_requires_redraw(true);
     }
 
     fn insert_char(&mut self, character: char) {
@@ -76,23 +85,23 @@ impl View {
             .map_or(0, Line::grapheme_count);
 
         self.buffer.insert_char(character, self.text_location);
+        
         let new_len = self
             .buffer
             .lines
             .get(self.text_location.line_index)
             .map_or(0, Line::grapheme_count);
-
         let grapheme_delta = new_len.saturating_sub(old_len);
         if grapheme_delta > 0 {
-            self.move_text_location(Direction::Right);
+            self.handle_move_command(Move::Right);
         }
-        self.mark_redraw(true);
+        self.set_requires_redraw(true);
     }
 
     fn insert_newline(&mut self) {
         self.buffer.insert_newline(self.text_location);
-        self.move_text_location(Direction::Right);
-        self.mark_redraw(true);
+        self.handle_move_command(Move::Right);
+        self.set_requires_redraw(true);
     }
 
     fn render_line(at: usize, line_text: &str) -> Result<(), Error> {
@@ -125,7 +134,7 @@ impl View {
             false
         };
         if offset_changed {
-            self.mark_redraw(true);
+            self.set_requires_redraw(true);
         }
     }
 
@@ -141,7 +150,7 @@ impl View {
             false
         };
         if offset_changed {
-            self.mark_redraw(true);
+            self.set_requires_redraw(true);
         }
     }
 
@@ -161,22 +170,6 @@ impl View {
         let Position { row, col } = self.text_location_to_position();
         self.scroll_vertically(row);
         self.scroll_horizontally(col);
-    }
-
-    fn move_text_location(&mut self, direction: Direction) {
-        let Size { height, .. } = self.size;
-
-        match direction {
-            Direction::Up => self.move_up(1),
-            Direction::Down => self.move_down(1),
-            Direction::Left => self.move_left(),
-            Direction::Right => self.move_right(),
-            Direction::PageUp => self.move_up(height.saturating_sub(1)),
-            Direction::PageDown => self.move_down(height.saturating_sub(1)),
-            Direction::Home => self.move_to_start_of_line(),
-            Direction::End => self.move_to_end_of_line(),
-        }
-        self.scroll_text_location_into_view();
     }
 
     fn move_up(&mut self, step: usize) {
@@ -240,9 +233,8 @@ impl View {
         self.text_location.line_index = min(self.text_location.line_index, self.buffer.height());
     }
 
-    fn save(&mut self) {
-        let _ = self.buffer.save();
-    }
+    
+
     pub fn get_status(&self) -> DocumentStatus {
         DocumentStatus {
             total_lines: self.buffer.height(),
@@ -254,13 +246,15 @@ impl View {
 }
 
 impl UIComponent for View {
-    fn mark_redraw(&mut self, value: bool) {
-        self.needs_redraw = value;
+    fn set_requires_redraw(&mut self, value: bool) {
+        self.requires_redraw = value;
     }
 
-    fn needs_redraw(&self) -> bool {
-        self.needs_redraw
+    fn requires_redraw(&self) -> bool {
+        self.requires_redraw
     }
+    
+
     fn set_size(&mut self, size: Size) {
         self.size = size;
         self.scroll_text_location_into_view();
@@ -279,7 +273,7 @@ impl UIComponent for View {
             // subtract origin_y to get the current row relative to the view (ranging from 0 to self.size.height)
             // and add the scroll offset.
             let line_idx = current_row  
-            .saturating_sub(origin_y)
+                .saturating_sub(origin_y)
                 .saturating_add(scroll_top);
             if let Some(line) = self.buffer.lines.get(line_idx) {
                 let left = self.scroll_offset.col;

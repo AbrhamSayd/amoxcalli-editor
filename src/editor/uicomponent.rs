@@ -4,15 +4,15 @@ use super::terminal::Size;
 
 pub trait UIComponent {
     // Marks this UI component as in need of redrawing (or not)
-    fn mark_redraw(&mut self, needs_redraw: bool);
+    fn set_requires_redraw(&mut self, requires_redraw: bool);
 
     // Determine if this component needs to be redrawn
-    fn needs_redraw(&self) -> bool;
+    fn requires_redraw(&self) -> bool;
 
     // Update the size and redraws
     fn resize(&mut self, size: Size) {
         self.set_size(size);
-        self.mark_redraw(true);
+        self.set_requires_redraw(true);
     }
 
     //Updates the size. Must be implemented by the component.
@@ -20,9 +20,9 @@ pub trait UIComponent {
 
     // Draw this component if it's visible and in need of redrawing
     fn render(&mut self, origin_y: usize){
-        if self.needs_redraw() {
+        if self.requires_redraw() {
             match self.draw(origin_y) {
-                Ok(()) => self.mark_redraw(false),
+                Ok(()) => self.set_requires_redraw(false),
                 Err(err) => {
                     #[cfg(debug_assertions)]
                     {

@@ -1,11 +1,11 @@
 use std::{
     fmt::{self, Display},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 const NO_NAME: &str = "[No Name]";
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug)]
 pub struct FileInfo {
     pub path: Option<PathBuf>,
 }
@@ -15,6 +15,12 @@ impl FileInfo {
         Self {
             path: Some(PathBuf::from(file_name)),
         }
+    }
+    pub fn get_path(&self) -> Option<&Path> {
+        self.path.as_deref()
+    }
+    pub const fn has_path(&self) -> bool {
+        self.path.is_some()
     }
 }
 

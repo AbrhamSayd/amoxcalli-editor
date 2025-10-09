@@ -6,26 +6,9 @@ use crossterm::terminal::{
 };
 use crossterm::{queue, Command};
 use std::io::{stdout, Error, Write};
+use super::{Position, Size};
 
-#[derive(Default,Copy, Clone, Eq, PartialEq)]
-pub struct Size {
-    pub height: usize,
-    pub width: usize,
-}
-#[derive(Copy, Clone, Default)]
-pub struct Position {
-    pub col: usize,
-    pub row: usize,
-}
 
-impl Position {
-    pub const fn saturating_sub(self, other: Position) -> Position {
-        Self {
-            row: self.row.saturating_sub(other.col),
-            col: self.col.saturating_sub(other.row),
-        }
-    }
-}
 
 pub struct Terminal;
 

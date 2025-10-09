@@ -1,17 +1,14 @@
 use std::{cmp::min, io::Error};
 
-use self::line::Line;
-
 use super::{
     command::{Edit, Move},
-    terminal::{Position, Size, Terminal},
-    uicomponent::UIComponent,
-    DocumentStatus, NAME, VERSION,
+    DocumentStatus, Line, Position, Size, Terminal, UIComponent, NAME, VERSION,
 };
 
 mod buffer;
 use buffer::Buffer;
-mod line;
+mod fileinfo;
+use fileinfo::FileInfo;
 
 #[derive(Copy, Clone, Default)]
 pub struct Location {
@@ -28,6 +25,13 @@ pub struct View {
 }
 
 impl View {
+
+    pub const fn is_file_loaded(&self) -> bool {
+        self.buffer.is_file_loaded()
+    }
+    pub fn save_as(&mut self, file_name: &str) -> Result<(), Error> {
+        self.buffer.save_as(file_name)
+    }
     pub fn handle_edit_command(&mut self, command: Edit) {
         match command {
             Edit::Insert(character) => self.insert_char(character),

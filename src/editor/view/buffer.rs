@@ -2,12 +2,22 @@ use std::io::{Write, Error};
 use std::fs::{read_to_string, File};
 
 use super::{Line, Location, FileInfo};
-#[derive(Default)]
 pub struct Buffer {
     pub lines: Vec<Line>,
     pub file_name: Option<String>,
     pub dirty: bool,
     pub file_info: FileInfo
+}
+
+impl Default for Buffer {
+    fn default() -> Self {
+        Self {
+            lines: vec![Line::default()], // Start with at least one empty line
+            file_name: None,
+            dirty: false,
+            file_info: FileInfo::default(),
+        }
+    }
 }
 
 impl Buffer {

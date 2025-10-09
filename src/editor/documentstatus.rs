@@ -15,13 +15,15 @@ impl DocumentStatus {
         }
     }
     pub fn line_count_to_string(&self) -> String {
-        format!("{} lines", self.total_lines)
+        let line_count = if self.total_lines == 0 { 1 } else { self.total_lines };
+        format!("{} lines", line_count)
     }
     pub fn position_indicator_to_string(&self) -> String {
+        let total = if self.total_lines == 0 { 1 } else { self.total_lines };
         format!(
             "{}/{}",
             self.current_line_index.saturating_add(1),
-            self.total_lines
+            total
         )
     }
 }

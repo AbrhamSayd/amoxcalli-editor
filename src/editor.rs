@@ -201,10 +201,21 @@ impl Editor {
                 } else if self.mode.is_normal() {
                     // In Normal mode, 'i' or 'I' enters Insert mode
                     if let command::Edit::Insert(ch) = edit_command {
-                        if ch == 'i' || ch == 'I' {
-                            self.mode = Mode::Insert;
-                            self.message_bar.update_message("-- INSERT --");
-                            self.refresh_status();
+                        match ch {
+                            '\u{1b}' => { /* Ignore ESC in normal mode */},
+                            'i' => {
+                                self.mode = Mode::Insert;
+                                self.message_bar.update_message("-- INSERT --");
+                                self.refresh_status();
+                            }
+                            'I' => {
+                                self.view.handle_move_command(command::Move::StartOfLine);
+                                self.mode = Mode::Insert;
+                                self.message_bar.update_message("-- INSERT --");
+                                self.refresh_status();
+                            },
+                        _ => {},
+                            
                         }
                     }
                 }

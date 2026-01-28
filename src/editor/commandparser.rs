@@ -7,6 +7,7 @@ pub enum ParsedCommand {
     WriteAsAndQuit(String), // :wq filename
     WriteAs(String),    // :w filename
     Unknown(String),
+    Help,             // :help
 }
 
 impl ParsedCommand {
@@ -31,6 +32,7 @@ impl ParsedCommand {
                 }
             }
             "q" | "quit" => Self::Quit,
+            "h" | "help" => Self::Help,
             "q!" | "quit!" => Self::ForceQuit,
             "wq" | "x" => {
                 if args.is_empty() {

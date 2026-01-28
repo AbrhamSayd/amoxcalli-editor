@@ -1,8 +1,10 @@
 use std::{cmp::min, io::Error};
 
+use crate::editor::documentstatus::DocumentStatus;
+
 use super::{
+    Line, NAME, Position, Size, Terminal, UIComponent, VERSION,
     command::{Edit, Move},
-    DocumentStatus, Line, Position, Size, Terminal, UIComponent, NAME, VERSION,
 };
 
 mod buffer;
@@ -25,7 +27,6 @@ pub struct View {
 }
 
 impl View {
-
     pub const fn is_file_loaded(&self) -> bool {
         self.buffer.is_file_loaded()
     }
@@ -41,7 +42,7 @@ impl View {
         }
     }
 
-    pub fn handle_move_command(&mut self, command: Move){
+    pub fn handle_move_command(&mut self, command: Move) {
         let Size { height, .. } = self.size;
         match command {
             Move::Up => self.move_up(1),
@@ -89,7 +90,7 @@ impl View {
             .map_or(0, Line::grapheme_count);
 
         self.buffer.insert_char(character, self.text_location);
-        
+
         let new_len = self
             .buffer
             .lines
@@ -237,8 +238,6 @@ impl View {
         self.text_location.line_index = min(self.text_location.line_index, self.buffer.height());
     }
 
-    
-
     pub fn get_status(&self) -> DocumentStatus {
         DocumentStatus {
             total_lines: self.buffer.height(),
@@ -257,13 +256,12 @@ impl UIComponent for View {
     fn requires_redraw(&self) -> bool {
         self.requires_redraw
     }
-    
 
     fn set_size(&mut self, size: Size) {
         self.size = size;
         self.scroll_text_location_into_view();
     }
-    
+
     fn draw(&mut self, origin_y: usize) -> Result<(), Error> {
         let Size { height, width } = self.size;
         let end_y = origin_y.saturating_add(height);
@@ -272,11 +270,11 @@ impl UIComponent for View {
         #[allow(clippy::integer_division)]
         let top_third = height / 3;
         let scroll_top = self.scroll_offset.row;
-        for current_row in origin_y..end_y {  
-           // to get the correct line index, we have to take current_row (the absolute row on screen),
+        for current_row in origin_y..end_y {
+            // to get the correct line index, we have to take current_row (the absolute row on screen),
             // subtract origin_y to get the current row relative to the view (ranging from 0 to self.size.height)
             // and add the scroll offset.
-            let line_idx = current_row  
+            let line_idx = current_row
                 .saturating_sub(origin_y)
                 .saturating_add(scroll_top);
             if let Some(line) = self.buffer.lines.get(line_idx) {
@@ -290,6 +288,5 @@ impl UIComponent for View {
             }
         }
         Ok(())
-          }
-    
+    }
 }

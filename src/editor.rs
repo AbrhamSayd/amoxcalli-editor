@@ -1,4 +1,4 @@
-use crossterm::event::{read, Event, KeyEvent, KeyEventKind};
+use crossterm::event::{Event, KeyEvent, KeyEventKind, read};
 use std::{
     env,
     io::Error,
@@ -6,34 +6,35 @@ use std::{
 };
 mod command;
 mod commandbar;
+mod commandparser;
 mod documentstatus;
 mod line;
 mod messagebar;
+mod mode;
 mod position;
 mod size;
 mod statusbar;
 mod terminal;
 mod uicomponent;
 mod view;
-
-use documentstatus::DocumentStatus;
 use line::Line;
+use documentstatus::DocumentStatus;
+
+use self::command::{
+    Command::{self, Edit, Move, System},
+    Edit::InsertNewLine,
+    System::{Dismiss, Resize, ShowCommandBar},
+};
 use messagebar::MessageBar;
+use mode::Mode;
 use position::Position;
 use size::Size;
 use statusbar::StatusBar;
 use terminal::Terminal;
 use uicomponent::UIComponent;
 use view::View;
-use self::command::{
-    Command::{self, Edit, Move, System},
-    Edit::InsertNewLine,
-    System::{Dismiss, Quit, Resize, Save},
-};
 pub const NAME: &str = env!("CARGO_PKG_NAME");
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-
-const QUIT_TIMES: u8 = 3;
 
 #[derive(Default)]
 pub struct Editor {
@@ -45,6 +46,7 @@ pub struct Editor {
     terminal_size: Size,
     title: String,
     quit_times: u8,
+    mode: Mode,
 }
 
 impl Editor {
@@ -67,7 +69,6 @@ impl Editor {
                     .message_bar
                     .update_message(&format!("ERR: Could not open file: {file_name}"));
             }
-            
         }
         editor.refresh_status();
         editor.status_bar.set_requires_redraw(true);
@@ -101,8 +102,12 @@ impl Editor {
 
     pub fn refresh_status(&mut self) {
         let status = self.view.get_status();
+        let mode_str = match self.mode {
+            Mode::Normal => "NORMAL",
+            Mode::Insert => "INSERT",
+        };
 
-        let title = format!("{} - {NAME}", status.file_name);
+        let title = format!("{} - {NAME} [{}]", status.file_name, mode_str);
         self.status_bar.update_status(status);
 
         if title != self.title && matches!(Terminal::set_title(&title), Ok(())) {
@@ -137,8 +142,16 @@ impl Editor {
 
     #[allow(clippy::needless_pass_by_value)]
     fn evaluate_event(&mut self, event: Event) {
-         let should_process = match &event {
 
+        #[cfg(debug_assertions)]
+        if let Event::Key(key_event) = &event {
+            self.message_bar.update_message(&format!(
+                "Key: {:?}, Mods: {:?}, Kind: {:?}, State: {:?}",
+                key_event.code, key_event.modifiers, key_event.kind, key_event.state
+            ));
+        }
+
+        let should_process = match &event {
             Event::Key(KeyEvent { kind, .. }) => kind == &KeyEventKind::Press,
             Event::Resize(_, _) => true,
             _ => false,
@@ -150,51 +163,70 @@ impl Editor {
             }
         }
     }
-    
+
     fn process_command(&mut self, command: Command) {
         match command {
-            System(Quit) => {
-                if self.command_bar.is_none() {
-                    self.handle_quit();
-                }
-            }
             System(Resize(size)) => self.resize(size),
             _ => self.reset_quit_times(),
         }
+
         match command {
-            System(Quit | Resize(_)) => {},
-            System(Save) => {
-                if self.command_bar.is_none(){
-                    self.handle_save();
+            System( Resize(_)) => {}
+            System(Dismiss) => {
+                if self.command_bar.is_some() {
+                    self.dismiss_prompt();
+                    self.message_bar.update_message("Command cancelled.");
+                } else if self.mode.is_insert() {
+                    // ESC exits insert mode
+                    self.mode = Mode::Normal;
+                    self.message_bar.update_message("");
+                    self.refresh_status();
                 }
             }
-            System(Dismiss) => {
-                if self.command_bar.is_some(){
-                    self.dismiss_prompt();
-                    self.message_bar.update_message("Save aborted.");
-                }
+            System(ShowCommandBar) => {
+                self.show_prompt();
             }
             Edit(edit_command) => {
                 if let Some(command_bar) = &mut self.command_bar {
                     if matches!(edit_command, InsertNewLine) {
-                        let file_name = command_bar.value();
+                        let command_input = command_bar.value();
                         self.dismiss_prompt();
-                        self.save(Some(&file_name));
+                        self.execute_command(&command_input);
                     } else {
                         command_bar.handle_edit_command(edit_command);
                     }
-                } else {
+                } else if self.mode.is_insert() {
+                    // Only allow editing in Insert mode
                     self.view.handle_edit_command(edit_command);
+                } else if self.mode.is_normal() {
+                    // In Normal mode, 'i' or 'I' enters Insert mode
+                    if let command::Edit::Insert(ch) = edit_command {
+                        match ch {
+                            '\u{1b}' => { /* Ignore ESC in normal mode */},
+                            'i' => {
+                                self.mode = Mode::Insert;
+                                self.message_bar.update_message("-- INSERT --");
+                                self.refresh_status();
+                            }
+                            'I' => {
+                                self.view.handle_move_command(command::Move::StartOfLine);
+                                self.mode = Mode::Insert;
+                                self.message_bar.update_message("-- INSERT --");
+                                self.refresh_status();
+                            },
+                        _ => {},
+                            
+                        }
+                    }
                 }
             }
             Move(move_command) => {
                 if self.command_bar.is_none() {
                     self.view.handle_move_command(move_command);
                 }
-            },
+            }
         }
     }
-
     fn dismiss_prompt(&mut self) {
         self.command_bar = None;
         self.message_bar.set_requires_redraw(true);
@@ -202,7 +234,7 @@ impl Editor {
 
     fn show_prompt(&mut self) {
         let mut command_bar = commandbar::CommandBar::default();
-        command_bar.set_prompt("Save as: ");
+        command_bar.set_prompt(":");
         command_bar.resize(Size {
             height: 1,
             width: self.terminal_size.width,
@@ -211,38 +243,23 @@ impl Editor {
         self.command_bar = Some(command_bar);
     }
 
-    fn handle_save(&mut self) {
-        if self.view.is_file_loaded() {
-            self.save(None)
-        } else {
-            self.show_prompt();
-        }
-    }
-
-    fn save(&mut self, file_name: Option<&str>) {
+    fn save(&mut self, file_name: Option<&str>) -> Result<(), std::io::Error> {
         let result = if let Some(name) = file_name {
             self.view.save_as(name)
         } else {
             self.view.save()
         };
-        if result.is_ok() {
-            self.message_bar.update_message("File saved successfully.");
-        } else {
-            self.message_bar.update_message("Error writing file!");
-        }
-    }
 
-    fn handle_quit(&mut self){
-        if !self.view.get_status().is_modified || self.quit_times + 1 == QUIT_TIMES {
-            self.should_quit = true;
-        } else if self.view.get_status().is_modified {
-            self.message_bar.update_message(&format!(
-                "WARNING: File has unsaved changes. Press Ctrl-Q {} more times to quit.",
-                QUIT_TIMES - self.quit_times - 1
-            ));
-
-            self.quit_times += 1;
+        match &result {
+            Ok(_) => {
+                self.message_bar.update_message("File saved successfully.");
+                self.refresh_status(); // Refresh to update modified status
+            }
+            Err(_) => {
+                self.message_bar.update_message("Error writing file!");
+            }
         }
+        result
     }
 
     fn reset_quit_times(&mut self) {
@@ -258,7 +275,7 @@ impl Editor {
         }
         let bottom_bar_row = self.terminal_size.height.saturating_sub(1);
         let _ = Terminal::hide_caret();
-        
+
         if let Some(command_bar) = &mut self.command_bar {
             command_bar.render(bottom_bar_row);
         } else {
@@ -273,7 +290,7 @@ impl Editor {
         if self.terminal_size.height > 2 {
             self.view.render(0);
         }
-        
+
         let new_carret_position = if let Some(command_bar) = &self.command_bar {
             Position {
                 row: bottom_bar_row,
@@ -285,6 +302,64 @@ impl Editor {
         let _ = Terminal::move_caret_to(new_carret_position);
         let _ = Terminal::show_caret();
         let _ = Terminal::execute();
+    }
+
+    fn execute_command(&mut self, input: &str) {
+        use commandparser::ParsedCommand;
+
+        let command = ParsedCommand::parse(input);
+
+        match command {
+            ParsedCommand::Write => {
+                if self.view.is_file_loaded() {
+                    let _ = self.save(None);
+                } else {
+                    self.message_bar
+                        .update_message("No file name. Use :w <filename>");
+                }
+            }
+            ParsedCommand::WriteAs(filename) => {
+                let _ = self.save(Some(&filename));
+            }
+            ParsedCommand::Quit => {
+                if self.view.get_status().is_modified {
+                    self.message_bar
+                        .update_message("No write since last change. Use :q! to force quit.");
+                } else {
+                    self.should_quit = true;
+                }
+            }
+            ParsedCommand::ForceQuit => {
+                self.should_quit = true;
+            }
+            ParsedCommand::WriteQuit => {
+                if self.view.is_file_loaded() {
+                    if self.save(None).is_ok() {
+                        self.should_quit = true;
+                    }
+                } else {
+                    self.message_bar
+                        .update_message("No file name. Use :wq <filename>");
+                }
+            }
+            ParsedCommand::WriteAsAndQuit(filename) => {
+                if self.save(Some(&filename)).is_ok() {
+                    self.should_quit = true;
+                }
+            }
+             ParsedCommand::Unknown(cmd) => {
+                if cmd.is_empty() {
+                    self.message_bar.update_message("");
+                } else {
+                    self.message_bar
+                        .update_message(&format!("Unknown command: {}", cmd));
+                }
+            }
+            ParsedCommand::Help =>{
+                let help_message = "Commands: :w (write), :w <filename> (write as), :q (quit), :q! (force quit), :wq (write and quit), :wq <filename> (write as and quit), :help (this message)";
+                self.message_bar.update_message(help_message);
+            }
+        }
     }
 }
 

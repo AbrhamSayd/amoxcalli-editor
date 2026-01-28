@@ -347,9 +347,13 @@ impl Editor {
                     self.should_quit = true;
                 }
             }
-            ParsedCommand::Unknown(cmd) => {
-                self.message_bar
-                    .update_message(&format!("Unknown command: {}", cmd));
+             ParsedCommand::Unknown(cmd) => {
+                if cmd.is_empty() {
+                    self.message_bar.update_message("");
+                } else {
+                    self.message_bar
+                        .update_message(&format!("Unknown command: {}", cmd));
+                }
             }
             ParsedCommand::Help =>{
                 let help_message = "Commands: :w (write), :w <filename> (write as), :q (quit), :q! (force quit), :wq (write and quit), :wq <filename> (write as and quit), :help (this message)";

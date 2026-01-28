@@ -87,24 +87,13 @@ impl TryFrom<KeyEvent> for System {
     type Error = String;
 
     fn try_from(event: KeyEvent) -> Result<Self, Self::Error> {
-        let KeyEvent {
-            code, modifiers, ..
-        } = event;
-        
-        if modifiers == KeyModifiers::NONE {
-            match code {
-                KeyCode::Esc => Ok(Self::Dismiss),
-                Char(':') => Ok(Self::ShowCommandBar),
-                _ => Err(format!("Unrecognized key: {code:?}")),
-            }
-        } else if modifiers == KeyModifiers::CONTROL {
-            match code {
-                _ => Err(format!("Unrecognized CONTROL+{code:?} combination")),
-            }
-        } else {
-            Err(format!(
-                "Unsupported key code {code:?} or modifier {modifiers:?}",
-            ))
+        match (event.code, event.modifiers) {
+            (KeyCode::Esc, KeyModifiers::NONE) => Ok(Self::Dismiss),
+            (Char(':'), KeyModifiers::NONE | KeyModifiers::SHIFT) => Ok(Self::ShowCommandBar),
+            _ => Err(format!(
+                "Unsupported key code {:?} or modifier {:?}",
+                event.code, event.modifiers
+            )),
         }
     }
 }

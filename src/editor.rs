@@ -185,8 +185,6 @@ impl Editor {
             }
             System(ShowCommandBar) => {
                 self.show_prompt();
-                if self.command_bar.is_none() && self.mode.is_normal() {
-                }
             }
             Edit(edit_command) => {
                 if let Some(command_bar) = &mut self.command_bar {
